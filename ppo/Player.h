@@ -2,6 +2,8 @@
 
 #include "Camera.h"
 #include "GameObject.h"
+#include "Sound.h"
+#include <thread>
 
 #define MAX_PLAYER_CAMERA_PITCH 85.0f
 
@@ -68,6 +70,21 @@ public:
 	bool IsFalling() { return mIsFalling; }
 
 	void SetZoomFactor(float zoom) { mZoomFactor = zoom; }
+
+	HRESULT InitializeXAudio2();
+	HRESULT playSound(LPCWSTR szFilename);
+	HRESULT stopSound();
+
+	virtual void PlaySoundThread(LPCWSTR szFilename);
+	void StopAllSounds();
+	void StartAllSounds();
+	void SetIsPlayingW(bool isPlaying) { isPlayingW = isPlaying; }
+	void SetIsPlayingA(bool isPlaying) { isPlayingA = isPlaying; }
+	void SetIsPlayingS(bool isPlaying) { isPlayingS = isPlaying; }
+	void SetIsPlayingD(bool isPlaying) { isPlayingD = isPlaying; }
+
+	CameraMode GetMode() { return mMode; }
+	
 private:
 	void InitPlayer();
 
@@ -85,7 +102,7 @@ private:
 	float mMaxVelocityY = 10.0f;
 	float mFriction = 10.0f;
 	
-	float mZoomFactor = 500.f;
+	float mZoomFactor = 100.f;
 
 	CameraMode mMode = THIRD_PERSON;
 
@@ -96,6 +113,13 @@ private:
 
 	PlayerState* mCurrentState = nullptr;
 	UINT mAnimationIndex[(UINT)StateId::Count];
+
+	ComPtr<IXAudio2> m_pXAudio2;
+	IXAudio2MasteringVoice* m_pMasteringVoice;
+	bool isPlayingW = false;
+	bool isPlayingA = false;
+	bool isPlayingS = false;
+	bool isPlayingD = false;
 };
 
 class PlayerStateIdle : public PlayerState
@@ -133,18 +157,25 @@ class PlayerStateLand : public PlayerState
 public:
 	PlayerStateLand() { mId = StateId::Land; }
 
-	void Enter(Player& player) override
+	virtual void Enter(Player& player) override
 	{
+		player.StopAllSounds();
+		// 소리를 재생하는 스레드 시작
+		std::thread soundThread([&player]() {
+			player.PlaySoundThread(L"Sound/landingSound.wav");
+			});
+		soundThread.detach(); // 스레드를 떼어내어 메인 스레드와 독립적으로 실행
 		player.SetAnimationTime();
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
-	void Update(Player& player, const float deltaTime) override
+	virtual void Update(Player& player, const float deltaTime) override
 	{
 		if (player.GetAnimationTime() > 0.85f) {
 			player.SetAnimationTime();
 			player.ChangeState(new PlayerStateIdle);
 		}
 	}
-	void Exit(Player& player) override {}
+	virtual void Exit(Player& player) override { }
 };
 
 class PlayerStateFall : public PlayerState
@@ -170,7 +201,16 @@ public:
 
 	virtual void Enter(Player& player) override
 	{
-		player.SetAnimationTime();
+		player.StopAllSounds();
+		// 소리를 재생하는 스레드 시작
+		std::thread soundThread([&player]() {
+			player.PlaySoundThread(L"Sound/JumpSound.wav");
+			});
+		soundThread.detach(); // 스레드를 떼어내어 메인 스레드와 독립적으로 실행
+		player.SetAnimationTime();		
+		// 스레드가 실행 중일 때까지 대기
+		if (soundThread.joinable())
+			soundThread.join();
 	}
 	virtual void Update(Player& player, const float deltaTime) override
 	{
@@ -179,5 +219,5 @@ public:
 			player.ChangeState(new PlayerStateFall);
 		}
 	}
-	virtual void Exit(Player& player) override {}
+	virtual void Exit(Player& player) override { }
 };

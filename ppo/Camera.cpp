@@ -111,6 +111,12 @@ void Camera::SetOffset(XMFLOAT3 position, float pitch, float yaw, float roll)
 	mViewDirty = true;
 }
 
+void Camera::SetViewMatrix(const XMMATRIX& viewMatrix)
+{
+	XMStoreFloat4x4(&mView, viewMatrix);
+	mViewDirty = false;
+}
+
 XMMATRIX Camera::GetView() const
 {
 	// 카메라가 이동하거나 회전한 이후 업데이트되지 않은 경우

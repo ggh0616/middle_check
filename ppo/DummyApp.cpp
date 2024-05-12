@@ -204,14 +204,23 @@ void DummyApp::OnMouseMove(WPARAM btnState, int x, int y)
 {
 	if ((btnState & MK_LBUTTON) != 0)
 	{
-		// Make each pixel correspond to a quarter of a degree.
-		float dx = XMConvertToRadians(0.25f * static_cast<float>(x - mLastMousePos.x));
-		float dy = XMConvertToRadians(0.25f * static_cast<float>(y - mLastMousePos.y));
+		if (mPlayer->GetMode() == THIRD_PERSON) {
+			// Make each pixel correspond to a quarter of a degree.
+			float dx = XMConvertToRadians(0.25f * static_cast<float>(x - mLastMousePos.x));
+			float dy = XMConvertToRadians(0.25f * static_cast<float>(y - mLastMousePos.y));
 
-		mPlayer->MouseInput(dx, dy);
+			mPlayer->MouseInput(dx, dy);
 
-		//mCamera->Pitch(dy);
-		//mCamera->RotateY(dx);
+			//mCamera->Pitch(dy);
+			//mCamera->RotateY(dx);
+		}
+		else if (mPlayer->GetMode() == FIRST_PERSON) {
+			// Make each pixel correspond to a quarter of a degree.
+			float dx = XMConvertToRadians(0.1f * static_cast<float>(x - mLastMousePos.x));
+			float dy = XMConvertToRadians(0.1f * static_cast<float>(y - mLastMousePos.y));
+
+			mPlayer->MouseInput(dx, dy);
+		}
 	}
 
 	mLastMousePos.x = x;

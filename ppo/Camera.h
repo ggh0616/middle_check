@@ -47,6 +47,7 @@ public:
 	void LookAt(const XMFLOAT3& pos, const XMFLOAT3& target, const XMFLOAT3& up);
 
 	void SetOffset(XMFLOAT3 position, float pitch, float yaw, float roll);
+	void SetViewMatrix(const XMMATRIX& viewMatrix);
 
 	// 시야 행렬과 투영 행렬 조회
 	XMMATRIX GetView()const;
