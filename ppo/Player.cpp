@@ -5,8 +5,7 @@ XMFLOAT3 MultipleVelocity(const XMFLOAT3& dir, const XMFLOAT3& scalar)
 	return XMFLOAT3(dir.x * scalar.x, dir.y * scalar.y, dir.z * scalar.z);
 }
 
-Player::Player() :
-	GameObject()
+Player::Player() : GameObject()
 {
 	InitPlayer();
 }
@@ -41,6 +40,11 @@ Player::~Player()
 {
 	if (mCamera)
 		delete mCamera;
+	if (m_pMasteringVoice) {
+		m_pMasteringVoice->DestroyVoice();
+	}
+	m_pXAudio2.Reset();
+	CoUninitialize();
 }
 
 void Player::Update(const GameTimer& gt)
@@ -187,8 +191,22 @@ void Player::KeyboardInput(float dt)
 	if (GetAsyncKeyState('D') & 0x8000)
 		mVelocity = Vector3::Add(mVelocity, MultipleVelocity(GetRight(), velocity));
 
-	if (GetAsyncKeyState('A') & 0x8000) 
-		mVelocity = Vector3::Add(mVelocity, MultipleVelocity(Vector3::ScalarProduct(GetRight(), -1), velocity));
+	if (GetAsyncKeyState('A') & 0x8000) {
+		if (!isPlaying) {
+			// 소리를 재생하는 스레드 시작
+			std::thread soundThread(PlaySoundThread, L"Sound/walk.wav");
+			soundThread.detach(); // 스레드를 떼어내어 메인 스레드와 독립적으로 실행
+			isPlaying = true;
+		}
+		mVelocity = Vector3::Add(mVelocity, MultipleVelocity(Vector3::ScalarProduct(GetRight(), -1), velocity));		
+	}
+	else {
+		// A 키가 눌리지 않았을 때 소리 재생 중이면 종료
+		if (isPlaying) {
+			HRESULT hr = stopSound(); // 소리 재생 중지
+			isPlaying = false;
+		}
+	}
 
 	if (GetAsyncKeyState('I') & 0x8000 && mZoomFactor > 100.f && mMode == THIRD_PERSON) {
 		float in = mZoomFactor;
@@ -232,6 +250,84 @@ void Player::MouseInput(float dx, float dy)
 	float maxPitchRaidan = XMConvertToRadians(MAX_PLAYER_CAMERA_PITCH);
 	mPitch += dy;
 	mPitch = (mPitch < -maxPitchRaidan) ? -maxPitchRaidan : (maxPitchRaidan < mPitch) ? maxPitchRaidan : mPitch;
+}
+
+HRESULT Player::InitializeXAudio2()
+{
+	HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+	if (FAILED(hr)) {
+		return hr;
+	}
+
+#ifdef USING_XAUDIO2_7_DIRECTX
+	HMODULE mXAudioDLL = LoadLibraryExW(L"XAudioD2_7.DLL", nullptr, 0x00000800 /* LOAD_LIBRARY_SEARCH_SYSTEM32 */);
+	if (!mXAudioDLL) {
+		CoUninitialize();
+		return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+	}
+#endif // USING_XAUDIO2_7_DIRECTX
+
+	UINT32 flags = 0;
+#if defined(USING_XAUDIO2_7_DIRECTX) && defined(_DEBUG)
+	flags |= XAUDIO2_DEBUG_ENGINE;
+#endif
+
+	hr = XAudio2Create(m_pXAudio2.GetAddressOf(), flags);
+	if (FAILED(hr)) {
+		CoUninitialize();
+		return hr;
+	}
+
+#if !defined(USING_XAUDIO2_7_DIRECTX) && defined(_DEBUG)
+	XAUDIO2_DEBUG_CONFIGURATION debug = {};
+	debug.TraceMask = XAUDIO2_LOG_ERRORS | XAUDIO2_LOG_WARNINGS;
+	debug.BreakMask = XAUDIO2_LOG_ERRORS;
+	m_pXAudio2->SetDebugConfiguration(&debug, 0);
+#endif
+
+	if (FAILED(hr = m_pXAudio2->CreateMasteringVoice(&m_pMasteringVoice))) {
+		m_pXAudio2.Reset();
+		CoUninitialize();
+		return hr;
+	}
+
+	return S_OK;
+}
+
+HRESULT Player::playSound(LPCWSTR szFilename)
+{
+	if (!m_pXAudio2) {
+		return E_FAIL;
+	}
+
+	HRESULT hr = PlayWave(m_pXAudio2.Get(), szFilename);
+	if (FAILED(hr)) {
+		return hr;
+	}
+
+	return S_OK;
+}
+
+HRESULT Player::stopSound()
+{
+	// 소리를 재생하기 전에 소리 엔진이 초기화되었는지 확인합니다.
+	if (!m_pXAudio2 || !m_pMasteringVoice)
+	{
+		// 소리 엔진이 초기화되지 않았으면 오류를 반환합니다.
+		return E_FAIL;
+	}
+
+	// 현재 소리를 재생 중인 소스 보이스를 중지합니다.
+	// 이 예시에서는 단순히 모든 소스 보이스를 중지시킵니다.
+	m_pXAudio2->StopEngine();
+
+	return S_OK;
+}
+
+void Player::PlaySoundThread(LPCWSTR szFilename)
+{
+	HRESULT hr = InitializeXAudio2(); // XAudio2 초기화
+	hr = playSound(szFilename);
 }
 
 void Player::InitPlayer()

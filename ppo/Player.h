@@ -2,6 +2,8 @@
 
 #include "Camera.h"
 #include "GameObject.h"
+#include "Sound.h"
+#include <thread>
 
 #define MAX_PLAYER_CAMERA_PITCH 85.0f
 
@@ -68,6 +70,12 @@ public:
 	bool IsFalling() { return mIsFalling; }
 
 	void SetZoomFactor(float zoom) { mZoomFactor = zoom; }
+
+	HRESULT InitializeXAudio2();
+	HRESULT playSound(LPCWSTR szFilename);
+	HRESULT stopSound();
+
+	void PlaySoundThread(LPCWSTR szFilename);
 private:
 	void InitPlayer();
 
@@ -96,6 +104,10 @@ private:
 
 	PlayerState* mCurrentState = nullptr;
 	UINT mAnimationIndex[(UINT)StateId::Count];
+
+	ComPtr<IXAudio2> m_pXAudio2;
+	IXAudio2MasteringVoice* m_pMasteringVoice;
+	bool isPlaying = false;
 };
 
 class PlayerStateIdle : public PlayerState
